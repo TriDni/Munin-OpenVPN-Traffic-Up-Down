@@ -1,0 +1,62 @@
+#!/usr/bin/perl
+
+# License
+#   GPLv2 (http://www.gnu.org/licenses/gpl-2.0.txt)
+# Authors
+#   DENNI Tristan
+
+use strict;
+#use warnings;
+use Storable;
+
+my $retrieve, my %existingUsers, my $state = 0, my %value;
+
+if (-e "/tmp/ovpnreceived.dump") { $retrieve = retrieve "/tmp/ovpnreceived.dump"; }
+
+open(LOG, "<", "/etc/openvpn/openvpn-status.log");
+while(<LOG>) {
+	my $line = $_;
+	chomp($line);
+
+	if ($line =~ /^Common.*/) { $state = 1; next; }
+	elsif ($line =~ /^ROUTING.*/) { $state = 0; }
+
+	if ($state == 0) { next; }
+
+	my @result = split(",", $line);
+	my $name = $result[0];
+	
+	$existingUsers{$name} = "";
+	
+	$value{$name} = $result[3];
+	}
+close(LOG);
+
+if (defined $retrieve) {
+	foreach my $i (keys $retrieve) {
+		if (!defined $existingUsers{$i}) {
+			$existingUsers{$i} = "";
+			$value{$i} = "NaN";
+			}
+		}
+	}
+
+store \%existingUsers,  "/tmp/ovpnreceived.dump";
+
+if ( exists $ARGV[0] and $ARGV[0] eq "config" ) {
+        print "graph_title Traffic Received\n";
+        print "graph_vlabel bytes\n";
+        print "graph_category openvpn\n";
+        print "graph_args --base 1024 -l 0\n";
+
+	foreach my $i (keys %value) {
+		print $i.".label ".$i."\n";
+		print $i.".critical :1000000000\n";
+		print $i.".warning :800000000\n";
+		}
+}
+else {
+	foreach my $i (keys %value) {
+		print $i.".value ".$value{$i}."\n";
+		}	
+}
